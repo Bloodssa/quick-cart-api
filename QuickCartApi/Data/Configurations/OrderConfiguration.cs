@@ -27,6 +27,10 @@ namespace QuickCartApi.Data.Configurations
                 .OnDelete(DeleteBehavior.Restrict);
 
             builder.Property(o => o.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+            builder.Property(o => o.ShippingFee).HasPrecision(18, 2);
+            builder.Property(o => o.ShippingDiscount).HasPrecision(18, 2);
+            builder.Property(o => o.DiscountAmount).HasPrecision(10, 2);
+            builder.Property(o => o.VoucherCode).HasMaxLength(20);
         }
     }
 }

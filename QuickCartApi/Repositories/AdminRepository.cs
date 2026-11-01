@@ -1,6 +1,7 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using QuickCartApi.Common;
 using QuickCartApi.Data;
+using QuickCartApi.DTOs.Admin.Customer;
 using QuickCartApi.DTOs.Admin.Dashboard;
 using QuickCartApi.DTOs.Admin.Reports;
 using QuickCartApi.Entities;
@@ -16,6 +17,7 @@ namespace QuickCartApi.Repositories
         private static readonly TimeSpan PhOffset = TimeSpan.FromHours(8); // ph time utc+8
         private IQueryable<Order> Orders = context.Orders.AsNoTracking(); // no track entities just read
         private IQueryable<Order> PaidOrders => Orders.Where(o => o.Transaction != null && o.Transaction.PaymentStatus == PaymentStatus.Paid); // paid orders
+        private IQueryable<User> Customers => context.Users.AsNoTracking().Where(u => u.Role != "Admin");
 
         public async Task<DashboardResponse> GetDashboardAsync()
         {
@@ -43,6 +45,7 @@ namespace QuickCartApi.Repositories
 
                 NewCustomers7d = customers.New,
                 TotalCustomers = customers.Total,
+                Reviews = await GetReviewStatsAsync(rangeStartUtc),
 
                 OrdersByStatus = await GetOrdersByStatusAsync(),
                 Restock = await GetRestockAsync(),
@@ -139,6 +142,82 @@ namespace QuickCartApi.Repositories
             return (rows, total);
         }
 
+        public async Task<(List<CustomerSummaryResponse> Items, int Total)> GetCustomersAsync(string? search, int page, int pageSize)
+        {
+            var query = Customers;
+
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var term = search.Trim();
+                query = query.Where(u => u.Username.Contains(term) || u.Email.Contains(term));
+            }
+
+            var total = await query.CountAsync();
+
+            var items = await query
+                .OrderByDescending(u => u.CreatedAt)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .Select(u => new CustomerSummaryResponse
+                {
+                    Id = u.Id,
+                    FullName = u.Username,
+                    Email = u.Email,
+                    CreatedAt = u.CreatedAt,
+                    OrderCount = context.Orders.Count(o => o.UserId == u.Id),
+                    TotalSpent = context.Orders
+                        .Where(o => o.UserId == u.Id && o.Transaction != null && o.Transaction.PaymentStatus == PaymentStatus.Paid)
+                        .Sum(o => (decimal?)o.Total) ?? 0m
+                })
+                .ToListAsync();
+
+            foreach (var c in items) c.CreatedAt = DateTime.SpecifyKind(c.CreatedAt, DateTimeKind.Utc);
+
+            return (items, total);
+        }
+
+        public async Task<CustomerDetailResponse?> GetCustomerDetailAsync(int id)
+        {
+            var customer = await Customers
+                .Where(u => u.Id == id)
+                .Select(u => new CustomerDetailResponse
+                {
+                    Id = u.Id,
+                    FullName = u.Username,
+                    Email = u.Email,
+                    CreatedAt = u.CreatedAt,
+                    OrderCount = context.Orders.Count(o => o.UserId == u.Id),
+                    TotalSpent = context.Orders
+                        .Where(o => o.UserId == u.Id && o.Transaction != null && o.Transaction.PaymentStatus == PaymentStatus.Paid)
+                        .Sum(o => (decimal?)o.Total) ?? 0m
+                })
+                .FirstOrDefaultAsync();
+
+            if (customer is null) return null;
+
+            customer.CreatedAt = DateTime.SpecifyKind(customer.CreatedAt, DateTimeKind.Utc);
+
+            customer.RecentOrders = await Orders
+                .Where(o => o.UserId == id)
+                .OrderByDescending(o => o.OrderDate)
+                .Take(5)
+                .Select(o => new CustomerOrderResponse
+                {
+                    Id = o.Id,
+                    OrderNumber = o.OrderNumber,
+                    Status = o.Status.ToString(),
+                    Total = o.Total,
+                    OrderDate = o.OrderDate
+                })
+                .ToListAsync();
+
+            foreach (var o in customer.RecentOrders) o.OrderDate = DateTime.SpecifyKind(o.OrderDate, DateTimeKind.Utc);
+
+            return customer;
+        }
+
+        // HELPERS FUNCTIONS
+
         // return tuple by counting the orders statuses
         private async Task<(int Pending, int Stale, int Today, int Yesterday)> GetOrderCountsAsync(DateTime nowUtc, DateTime todayStartUtc)
         {
@@ -177,6 +256,59 @@ namespace QuickCartApi.Repositories
                 .FirstOrDefaultAsync();
 
             return row is null ? (0, 0, 0) : (row.Current, row.Previous, row.CurrentCount);
+        }
+
+        // unanswered reviews, the 30-day rating, and the 5 that need attention first (lowest stars, then newest)
+        private async Task<DashboardReviews> GetReviewStatsAsync(DateTime rangeStartUtc)
+        {
+            var reviews = context.ProductReviews.AsNoTracking();
+
+            var pending = await reviews
+                .GroupBy(_ => 1)
+                .Select(g => new
+                {
+                    NeedsReply = g.Count(r => r.AdminReply == null),
+                    Low = g.Count(r => r.AdminReply == null && r.Rating <= 2)
+                })
+                .FirstOrDefaultAsync();
+
+            var recent = await reviews
+                .Where(r => r.CreatedAtUtc >= rangeStartUtc)
+                .GroupBy(_ => 1)
+                .Select(g => new { Count = g.Count(), Average = g.Average(r => (double)r.Rating) })
+                .FirstOrDefaultAsync();
+
+            var latest = await reviews
+                .Where(r => r.AdminReply == null)
+                .OrderBy(r => r.Rating)
+                .ThenByDescending(r => r.CreatedAtUtc)
+                .Take(5)
+                .Select(r => new DashboardReview
+                {
+                    Id = r.Id,
+                    ProductId = r.ProductId,
+                    ProductName = r.Product.Name,
+                    CustomerName = r.User.Username,
+                    Rating = r.Rating,
+                    Comment = r.Comment,
+                    CreatedAt = r.CreatedAtUtc
+                })
+                .ToListAsync();
+
+            foreach (var r in latest)
+            {
+                r.CreatedAt = DateTime.SpecifyKind(r.CreatedAt, DateTimeKind.Utc);
+                if (r.Comment is { Length: > 140 }) r.Comment = r.Comment[..140] + "…";
+            }
+
+            return new DashboardReviews
+            {
+                NeedsReply = pending?.NeedsReply ?? 0,
+                LowRatedNeedsReply = pending?.Low ?? 0,
+                Count30d = recent?.Count ?? 0,
+                Average30d = recent is null ? 0 : Math.Round(recent.Average, 1),
+                Latest = latest
+            };
         }
 
         private async Task<(int Low, int Out)> GetStockCountsAsync()

@@ -4,6 +4,7 @@ using QuickCartApi.Data;
 using QuickCartApi.DTOs.Address;
 using QuickCartApi.DTOs.Order;
 using QuickCartApi.DTOs.Order.Customer;
+using QuickCartApi.DTOs.Voucher;
 using QuickCartApi.Entities;
 using QuickCartApi.Enums;
 using QuickCartApi.Repositories.Interfaces;
@@ -16,9 +17,12 @@ namespace QuickCartApi.Services
         ICartItemRepository cartItemRepository,
         IAddressRepository addressRepository,
         IProductRepository productRepository,
+        IDealService dealService,
+        IVoucherService voucherService,
         ILogger<OrderService> logger,
         AppDbContext context,
-        IHttpContextAccessor httpContextAccessor
+        IHttpContextAccessor httpContextAccessor,
+        ShippingCalculator shipping
     ) : IOrderService
     {
         private const decimal ShippingFee = 0m;
@@ -37,19 +41,42 @@ namespace QuickCartApi.Services
             if (cartItems.Count != cartItemIds.Count)
                 return Result.Fail<OrderResponse>(ErrorKind.Conflict, "Some selected items are no longer in your cart. Please review your cart and try again.");
 
+            // a product with an active discount is charged the discounted price
+            var dealPrices = await dealService.GetActivePricesAsync(cartItems.Select(ci => ci.ProductId).Distinct().ToList());
 
             // LIST<OrderItems>
             // make a list of the select cart item can be specific or one checkout or multiple from the cart
-            var orderItems = cartItems.Select(ci => new OrderItem
+            var orderItems = cartItems.Select(ci =>
             {
-                ProductId = ci.ProductId,
-                UnitPrice = ci.Product.Price,
-                Quantity = ci.Quantity,
-                SubTotal = ci.Product.Price * ci.Quantity
+                var unitPrice = dealPrices.TryGetValue(ci.ProductId, out var deal) ? deal.DealPrice : ci.Product.Price;
+
+                return new OrderItem
+                {
+                    ProductId = ci.ProductId,
+                    UnitPrice = unitPrice,
+                    Quantity = ci.Quantity,
+                    SubTotal = unitPrice * ci.Quantity
+                };
             }).ToList();
 
             var subTotal = orderItems.Sum(i => i.SubTotal);
-            var total = subTotal + ShippingFee;
+
+            // begin transaction for multiple operations
+            await using var transaction = await context.Database.BeginTransactionAsync();
+
+            // optional voucher: checked and claimed inside the transaction, so a failed order gives it back
+            AppliedVoucher? voucher = null;
+            if (!string.IsNullOrWhiteSpace(request.VoucherCode))
+            {
+                var applied = await voucherService.ApplyAsync(userId, request.VoucherCode, subTotal);
+                if (!applied.Success)
+                    return Result.Fail<OrderResponse>(applied.Kind, applied.Error!); // disposing rolls back
+
+                voucher = applied.Value;
+            }
+
+            var discount = voucher?.Discount ?? 0m;
+            var total = subTotal - discount + ShippingFee;
 
             var order = new Order
             {
@@ -57,6 +84,9 @@ namespace QuickCartApi.Services
                 AddressId = address.Id,
                 OrderNumber = await GenerateOrderNumberAsync(),
                 SubTotal = subTotal,
+                VoucherId = voucher?.VoucherId,
+                VoucherCode = voucher?.Code,
+                DiscountAmount = discount,
                 Total = total,
                 Status = OrderStatus.Pending,
                 OrderDate = DateTime.UtcNow,
@@ -70,9 +100,6 @@ namespace QuickCartApi.Services
                     TransactionDate = DateTime.UtcNow
                 }
             };
-
-            // begin transaction for multiple operations
-            await using var transaction = await context.Database.BeginTransactionAsync();
 
             var removed = await cartItemRepository.DeleteByIdsAsync(userId, cartItemIds);
             if (removed != cartItemIds.Count)
@@ -225,6 +252,10 @@ namespace QuickCartApi.Services
             {
                 foreach (var item in order.Items)
                     await productRepository.IncrementStockAsync(item.ProductId, item.Quantity);
+
+                // the voucher use goes back, so the customer can use it on another order
+                if (order.VoucherId is { } voucherId)
+                    await voucherService.ReleaseAsync(voucherId);
             }
 
             order.Status = newStatus;
@@ -278,9 +309,12 @@ namespace QuickCartApi.Services
             Status = order.Status.ToString(),
             CustomerName = order.User.FullName,
             SubTotal = order.SubTotal,
-            ShippingFee = order.Total - order.SubTotal,
+            ShippingFee = order.ShippingFee,
+            ShippingDiscount = order.ShippingDiscount,
             Total = order.Total,
             OrderDate = order.OrderDate,
+            DiscountAmount = order.DiscountAmount,
+            VoucherCode = order.VoucherCode,
 
             Address = new AddressResponse
             {

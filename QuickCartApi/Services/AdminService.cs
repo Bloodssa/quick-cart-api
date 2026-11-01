@@ -1,10 +1,11 @@
-﻿using QuickCartApi.Common;
+﻿using QuestPDF.Fluent;
+using QuickCartApi.Common;
 using QuickCartApi.DTOs.Admin.Dashboard;
+using QuickCartApi.DTOs.Admin.Customer;
 using QuickCartApi.DTOs.Admin.Reports;
 using QuickCartApi.Reports;
 using QuickCartApi.Repositories.Interfaces;
 using QuickCartApi.Services.Interfaces;
-using QuestPDF.Fluent;
 
 namespace QuickCartApi.Services
 {
@@ -48,6 +49,27 @@ namespace QuickCartApi.Services
             return Result.Ok(pdf);
         }
 
+        public async Task<CustomerListResponse> GetCustomersAsync(string? search, int page, int pageSize)
+        {
+            page = page < 1 ? 1 : page;
+            pageSize = pageSize is < 1 or > 100 ? 10 : pageSize;
+
+            var (items, total) = await adminRepository.GetCustomersAsync(search, page, pageSize);
+
+            return new CustomerListResponse { Customers = items, Page = page, PageSize = pageSize, TotalResults = total };
+        }
+
+        public async Task<ServiceResult<CustomerDetailResponse>> GetCustomerAsync(int id)
+        {
+            var customer = await adminRepository.GetCustomerDetailAsync(id);
+
+            return customer is null
+                ? Result.Fail<CustomerDetailResponse>(ErrorKind.NotFound, "Customer not found.")
+                : Result.Ok(customer);
+        }
+
+
+        // helpers function
         // Awaited one after another: a DbContext can't run queries in parallel
         private async Task<SalesReportResponse> BuildAsync(ReportRange range, int skip, int take)
         {

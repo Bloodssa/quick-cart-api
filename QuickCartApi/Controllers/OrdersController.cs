@@ -15,7 +15,7 @@ namespace QuickCartApi.Controllers
     [Route("api/v{version:apiVersion}/[controller]")]
     [ApiController]
     [EnableRateLimiting(RateLimitingExtension.ReadPolicy)]
-    public class OrdersController(IOrderService orderService) : ControllerBase
+    public class OrdersController(IOrderService orderService, ShippingCalculator shipping) : ControllerBase
     {
         // POST api/v1/orders  { addressId, paymentMethod, cartItemIds }  ->  201 + the new order
         [HttpPost]
@@ -49,5 +49,10 @@ namespace QuickCartApi.Controllers
             var result = await orderService.CancelMyOrderAsync(User.GetUserId(), id);
             return result.Success ? Ok(result.Value) : result.ToProblem();
         }
-    }
+
+        [HttpGet("shipping-quote")]
+        [EnableRateLimiting(RateLimitingExtension.ReadPolicy)]
+        public ActionResult<ShippingQuote> GetShippingQuote([FromQuery] string? province, [FromQuery] string? city, [FromQuery] decimal subtotal)
+             => Ok(shipping.Quote(province, city, subtotal));
+        }
 }
