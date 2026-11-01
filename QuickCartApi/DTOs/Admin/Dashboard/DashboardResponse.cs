@@ -24,5 +24,6 @@ namespace QuickCartApi.DTOs.Admin.Dashboard
         public List<RevenueDay> RevenueByDay { get; set; } = [];
         public List<TopProduct> TopProducts { get; set; } = [];
         public List<NeedsActionOrder> NeedsAction { get; set; } = [];
+        public DashboardReviews Reviews { get; set; } = new();
     }
 }

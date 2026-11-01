@@ -1,4 +1,7 @@
-﻿using QuickCartApi.Repositories;
+﻿using Microsoft.AspNetCore.Identity;
+using QuickCartApi.Common;
+using QuickCartApi.Entities;
+using QuickCartApi.Repositories;
 using QuickCartApi.Repositories.Interfaces;
 using QuickCartApi.Services;
 using QuickCartApi.Services.Interfaces;
@@ -9,6 +12,10 @@ namespace QuickCartApi.Extensions
     {
         public static IServiceCollection AddApplicationServices(this IServiceCollection services)
         {
+            services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
+            services.AddSingleton(TimeProvider.System);
+            services.AddHttpContextAccessor();
+                
             // Repositories
             services.AddScoped(typeof(IBaseRepository<>), typeof(BaseRepository<>));
             services.AddScoped<IUserRepository, UserRepository>();
@@ -20,6 +27,9 @@ namespace QuickCartApi.Extensions
             services.AddScoped<IAddressRepository, AddressRepository>();
             services.AddScoped<IOrderRepository, OrderRepository>();
             services.AddScoped<IAdminRepository, AdminRepository>();
+            services.AddScoped<IReviewRepository, ReviewRepository>();
+            services.AddScoped<IDealRepository, DealRepository>();
+            services.AddScoped<IVoucherRepository, VoucherRepository>();
 
             // Services
             services.AddScoped<IAuthService, AuthService>();
@@ -32,6 +42,11 @@ namespace QuickCartApi.Extensions
             services.AddScoped<IAddressService, AddressService>();
             services.AddScoped<IOrderService, OrderService>();
             services.AddScoped<IAdminService, AdminService>();
+            services.AddScoped<IUserService, UserService>();
+            services.AddScoped<IReviewService, ReviewService>();
+            services.AddSingleton<ShippingCalculator>();
+            services.AddScoped<IDealService, DealService>();
+            services.AddScoped<IVoucherService, VoucherService>();
 
             return services;
         }

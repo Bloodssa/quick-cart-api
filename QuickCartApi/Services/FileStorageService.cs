@@ -6,7 +6,7 @@ namespace QuickCartApi.Services
     {
         private static readonly string[] AllowedExtensions = [".jpg", ".jpeg", ".png", ".webp"];
         private static readonly string[] AllowedContentTypes = ["image/jpeg", "image/png", "image/webp"];
-        private const long MaxFileSizeBytes = 4 * 1024 * 1024; // 4mb lmit
+        private const long MaxFileSizeBytes = 4 * 1024 * 1024; // 4mb limit
 
         // magic byte signatures for every allowed format
         private static readonly Dictionary<string, byte[][]> Signatures = new()
@@ -17,17 +17,17 @@ namespace QuickCartApi.Services
             [".webp"] = [[0x52, 0x49, 0x46, 0x46]]
         };
 
-        public async Task<(bool Success, string? FileName, string? Error)> SaveImageAsync(IFormFile file)
+        public async Task<(bool Success, string? FileName, string? Error)> SaveImageAsync(IFormFile file, string folder = "products")
         {
             if (file.Length == 0)
                 return (false, null, "File is Empty.");
 
             if (file.Length > MaxFileSizeBytes)
-                return (false, null, "File sized exceds to the 4mb limit.");
+                return (false, null, "File size exceeds the 4mb limit.");
 
             var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
 
-            // validate if the file is not allowed extenstion
+            // validate if the file is not allowed extension
             if (!AllowedExtensions.Contains(extension))
                 return (false, null, "Only .jpg, .jpeg, .png, and .webp files are allowed.");
 
@@ -49,9 +49,9 @@ namespace QuickCartApi.Services
             // random guid to store in string image url
             var fileName = $"{Guid.NewGuid():N}{extension}";
 
-            // www/root/uploads
+            // wwwroot/uploads/{folder}
             var webRoot = env.WebRootPath ?? Path.Combine(env.ContentRootPath, "wwwroot");
-            var uploadsFolder = Path.Combine(webRoot, "uploads", "products");
+            var uploadsFolder = Path.Combine(webRoot, "uploads", folder);
             Directory.CreateDirectory(uploadsFolder);
 
             var filePath = Path.Combine(uploadsFolder, fileName);
@@ -64,16 +64,17 @@ namespace QuickCartApi.Services
             return (true, fileName, null);
         }
 
-        public void DeleteImage(string fileName)
+        public void DeleteImage(string fileName, string folder = "products")
         {
-            if (string.IsNullOrWhiteSpace(fileName)) 
+            if (string.IsNullOrWhiteSpace(fileName))
                 return;
 
-            // protects from travers of root deletion
+            // protects from traversal of root deletion
             if (fileName.Contains("..") || fileName.Contains('/') || fileName.Contains('\\'))
                 return;
 
-            var path = Path.Combine(env.WebRootPath, "uploads", "products", fileName);
+            var webRoot = env.WebRootPath ?? Path.Combine(env.ContentRootPath, "wwwroot");
+            var path = Path.Combine(webRoot, "uploads", folder, fileName);
             if (File.Exists(path)) File.Delete(path);
         }
     }

@@ -15,6 +15,11 @@ namespace QuickCartApi.Data
         public DbSet<Order> Orders => Set<Order>();
         public DbSet<OrderItem> OrderItems => Set<OrderItem>();
         public DbSet<Transaction> Transactions => Set<Transaction>();
+        public DbSet<ProductReview> ProductReviews => Set<ProductReview>();
+        public DbSet<ReviewImage> ReviewImages => Set<ReviewImage>();
+        public DbSet<Deal> Deals => Set<Deal>();
+        public DbSet<DealProduct> DealProducts => Set<DealProduct>();
+        public DbSet<Voucher> Vouchers => Set<Voucher>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {

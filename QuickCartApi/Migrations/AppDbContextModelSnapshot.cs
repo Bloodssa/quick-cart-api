@@ -125,6 +125,57 @@ namespace QuickCartApi.Migrations
                     b.ToTable("Categories");
                 });
 
+            modelBuilder.Entity("QuickCartApi.Entities.Deal", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("CancelledAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("DiscountType")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("EndsAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("nvarchar(80)");
+
+                    b.Property<DateTime>("StartsAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<decimal>("Value")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("decimal(10,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StartsAtUtc", "EndsAtUtc");
+
+                    b.ToTable("Deals");
+                });
+
+            modelBuilder.Entity("QuickCartApi.Entities.DealProduct", b =>
+                {
+                    b.Property<int>("DealId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ProductId")
+                        .HasColumnType("int");
+
+                    b.HasKey("DealId", "ProductId");
+
+                    b.HasIndex("ProductId");
+
+                    b.ToTable("DealProducts");
+                });
+
             modelBuilder.Entity("QuickCartApi.Entities.Order", b =>
                 {
                     b.Property<int>("Id")
@@ -136,6 +187,10 @@ namespace QuickCartApi.Migrations
                     b.Property<int>("AddressId")
                         .HasColumnType("int");
 
+                    b.Property<decimal>("DiscountAmount")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("decimal(10,2)");
+
                     b.Property<DateTime>("OrderDate")
                         .HasColumnType("datetime2");
 
@@ -143,6 +198,14 @@ namespace QuickCartApi.Migrations
                         .IsRequired()
                         .HasMaxLength(30)
                         .HasColumnType("nvarchar(30)");
+
+                    b.Property<decimal>("ShippingDiscount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("ShippingFee")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -160,6 +223,13 @@ namespace QuickCartApi.Migrations
                     b.Property<int>("UserId")
                         .HasColumnType("int");
 
+                    b.Property<string>("VoucherCode")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<int?>("VoucherId")
+                        .HasColumnType("int");
+
                     b.HasKey("Id");
 
                     b.HasIndex("AddressId");
@@ -168,6 +238,8 @@ namespace QuickCartApi.Migrations
                         .IsUnique();
 
                     b.HasIndex("UserId");
+
+                    b.HasIndex("VoucherId");
 
                     b.ToTable("Orders");
                 });
@@ -275,6 +347,58 @@ namespace QuickCartApi.Migrations
                     b.ToTable("ProductImages");
                 });
 
+            modelBuilder.Entity("QuickCartApi.Entities.ProductReview", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("AdminReply")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("Comment")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("ProductId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Rating")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("RepliedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("ReplyEditedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("ProductId", "CreatedAtUtc");
+
+                    b.HasIndex("ProductId", "UserId")
+                        .IsUnique();
+
+                    b.ToTable("ProductReviews", t =>
+                        {
+                            t.HasCheckConstraint("CK_ProductReviews_Rating", "[Rating] BETWEEN 1 AND 5");
+                        });
+                });
+
             modelBuilder.Entity("QuickCartApi.Entities.RefreshToken", b =>
                 {
                     b.Property<int>("Id")
@@ -307,6 +431,29 @@ namespace QuickCartApi.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("RefreshTokens");
+                });
+
+            modelBuilder.Entity("QuickCartApi.Entities.ReviewImage", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<int>("ReviewId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ReviewId");
+
+                    b.ToTable("ReviewImages");
                 });
 
             modelBuilder.Entity("QuickCartApi.Entities.Transaction", b =>
@@ -401,6 +548,68 @@ namespace QuickCartApi.Migrations
                     b.ToTable("Users");
                 });
 
+            modelBuilder.Entity("QuickCartApi.Entities.Voucher", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<int>("DiscountType")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("EndsAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<decimal?>("MaxDiscount")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("decimal(10,2)");
+
+                    b.Property<decimal>("MinSpend")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("decimal(10,2)");
+
+                    b.Property<int>("PerUserLimit")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("StartsAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("nvarchar(80)");
+
+                    b.Property<int?>("UsageLimit")
+                        .HasColumnType("int");
+
+                    b.Property<int>("UsedCount")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("Value")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("decimal(10,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
+
+                    b.ToTable("Vouchers", t =>
+                        {
+                            t.HasCheckConstraint("CK_Vouchers_UsedCount", "[UsedCount] >= 0 AND ([UsageLimit] IS NULL OR [UsedCount] <= [UsageLimit])");
+                        });
+                });
+
             modelBuilder.Entity("QuickCartApi.Entities.Address", b =>
                 {
                     b.HasOne("QuickCartApi.Entities.User", "User")
@@ -431,6 +640,25 @@ namespace QuickCartApi.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("QuickCartApi.Entities.DealProduct", b =>
+                {
+                    b.HasOne("QuickCartApi.Entities.Deal", "Deal")
+                        .WithMany("Products")
+                        .HasForeignKey("DealId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("QuickCartApi.Entities.Product", "Product")
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Deal");
+
+                    b.Navigation("Product");
+                });
+
             modelBuilder.Entity("QuickCartApi.Entities.Order", b =>
                 {
                     b.HasOne("QuickCartApi.Entities.Address", "Address")
@@ -444,6 +672,11 @@ namespace QuickCartApi.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("QuickCartApi.Entities.Voucher", null)
+                        .WithMany()
+                        .HasForeignKey("VoucherId")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("Address");
 
@@ -491,6 +724,25 @@ namespace QuickCartApi.Migrations
                     b.Navigation("Product");
                 });
 
+            modelBuilder.Entity("QuickCartApi.Entities.ProductReview", b =>
+                {
+                    b.HasOne("QuickCartApi.Entities.Product", "Product")
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("QuickCartApi.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Product");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("QuickCartApi.Entities.RefreshToken", b =>
                 {
                     b.HasOne("QuickCartApi.Entities.User", "User")
@@ -500,6 +752,17 @@ namespace QuickCartApi.Migrations
                         .IsRequired();
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("QuickCartApi.Entities.ReviewImage", b =>
+                {
+                    b.HasOne("QuickCartApi.Entities.ProductReview", "Review")
+                        .WithMany("Images")
+                        .HasForeignKey("ReviewId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Review");
                 });
 
             modelBuilder.Entity("QuickCartApi.Entities.Transaction", b =>
@@ -518,6 +781,11 @@ namespace QuickCartApi.Migrations
                     b.Navigation("Products");
                 });
 
+            modelBuilder.Entity("QuickCartApi.Entities.Deal", b =>
+                {
+                    b.Navigation("Products");
+                });
+
             modelBuilder.Entity("QuickCartApi.Entities.Order", b =>
                 {
                     b.Navigation("Items");
@@ -532,6 +800,11 @@ namespace QuickCartApi.Migrations
                     b.Navigation("Images");
 
                     b.Navigation("OrderItems");
+                });
+
+            modelBuilder.Entity("QuickCartApi.Entities.ProductReview", b =>
+                {
+                    b.Navigation("Images");
                 });
 
             modelBuilder.Entity("QuickCartApi.Entities.User", b =>

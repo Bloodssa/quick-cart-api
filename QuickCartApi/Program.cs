@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using QuickCartApi.Common;
 using QuickCartApi.Data;
 using QuickCartApi.Extensions;
 using QuickCartApi.Options;
@@ -11,6 +12,13 @@ using System.Text.Json.Serialization;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection("Jwt"));
+
+builder.Services.AddOptions<ShippingOptions>()
+    .BindConfiguration(ShippingOptions.SectionName)
+    .Validate(o => o.FreeShippingThreshold > 0 && o.MaxShippingFee > 0, "Shipping: threshold and cap must be above 0.")
+    .Validate(o => o.Rates.Count > 0 && o.Rates.Values.All(r => r >= 0), "Shipping: rates must be set and not negative.")
+    .Validate(o => o.Tiers.All(t => t.Share > 0 && t.Percent is >= 0 and <= 100), "Shipping: each tier needs a share above 0 and a percent from 0 to 100.")
+    .ValidateOnStart();
 
 builder.Services.AddControllers();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
