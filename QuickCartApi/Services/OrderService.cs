@@ -25,8 +25,6 @@ namespace QuickCartApi.Services
         ShippingCalculator shipping
     ) : IOrderService
     {
-        private const decimal ShippingFee = 0m;
-
         public async Task<ServiceResult<OrderResponse>> PlaceOrderAsync(int userId, PlaceOrderRequest request)
         {
             // validate if address exists
@@ -41,25 +39,24 @@ namespace QuickCartApi.Services
             if (cartItems.Count != cartItemIds.Count)
                 return Result.Fail<OrderResponse>(ErrorKind.Conflict, "Some selected items are no longer in your cart. Please review your cart and try again.");
 
-            // a product with an active discount is charged the discounted price
-            var dealPrices = await dealService.GetActivePricesAsync(cartItems.Select(ci => ci.ProductId).Distinct().ToList());
+            // deals first, then shipping on the discounted goods (same code the preview uses)
+            var pricing = await PriceCartAsync(address, cartItems);
+            if (!pricing.Success)
+                return Result.Fail<OrderResponse>(pricing.Kind, pricing.Error!);
+            var priced = pricing.Value!;
 
             // LIST<OrderItems>
             // make a list of the select cart item can be specific or one checkout or multiple from the cart
-            var orderItems = cartItems.Select(ci =>
+            var orderItems = priced.Lines.Select(l => new OrderItem
             {
-                var unitPrice = dealPrices.TryGetValue(ci.ProductId, out var deal) ? deal.DealPrice : ci.Product.Price;
-
-                return new OrderItem
-                {
-                    ProductId = ci.ProductId,
-                    UnitPrice = unitPrice,
-                    Quantity = ci.Quantity,
-                    SubTotal = unitPrice * ci.Quantity
-                };
+                ProductId = l.Item.ProductId,
+                RegularPrice = l.RegularPrice,
+                UnitPrice = l.UnitPrice,
+                Quantity = l.Item.Quantity,
+                SubTotal = l.UnitPrice * l.Item.Quantity
             }).ToList();
 
-            var subTotal = orderItems.Sum(i => i.SubTotal);
+            var subTotal = priced.SubTotal;
 
             // begin transaction for multiple operations
             await using var transaction = await context.Database.BeginTransactionAsync();
@@ -76,7 +73,7 @@ namespace QuickCartApi.Services
             }
 
             var discount = voucher?.Discount ?? 0m;
-            var total = subTotal - discount + ShippingFee;
+            var total = subTotal - discount + priced.Shipping.Payable;
 
             var order = new Order
             {
@@ -84,6 +81,8 @@ namespace QuickCartApi.Services
                 AddressId = address.Id,
                 OrderNumber = await GenerateOrderNumberAsync(),
                 SubTotal = subTotal,
+                ShippingFee = priced.Shipping.Fee,
+                ShippingDiscount = priced.Shipping.Discount,
                 VoucherId = voucher?.VoucherId,
                 VoucherCode = voucher?.Code,
                 DiscountAmount = discount,
@@ -118,6 +117,56 @@ namespace QuickCartApi.Services
 
             var created = await orderRepository.GetByIdWithDetailsAsync(order.Id);
             return Result.Ok(ToResponse(created!));
+        }
+
+        public async Task<ServiceResult<OrderPreviewResponse>> PreviewAsync(int userId, OrderPreviewRequest request)
+        {
+            var address = await addressRepository.GetByIdForUserAsync(request.AddressId, userId);
+            if (address is null)
+                return Result.Fail<OrderPreviewResponse>(ErrorKind.Validation, "Please select a valid delivery address.");
+
+            var cartItemIds = request.CartItemIds.Distinct().ToList();
+            var cartItems = await cartItemRepository.GetByIdsForUserAsync(userId, cartItemIds);
+            if (cartItems.Count != cartItemIds.Count)
+                return Result.Fail<OrderPreviewResponse>(ErrorKind.Conflict, "Some selected items are no longer in your cart.");
+
+            var pricing = await PriceCartAsync(address, cartItems);
+            if (!pricing.Success)
+                return Result.Fail<OrderPreviewResponse>(pricing.Kind, pricing.Error!);
+            var priced = pricing.Value!;
+
+            // a refused code does not fail the whole preview: the shopper still sees prices and shipping
+            AppliedVoucher? voucher = null;
+            string? voucherError = null;
+            if (!string.IsNullOrWhiteSpace(request.VoucherCode))
+            {
+                var check = await voucherService.CheckAsync(userId, request.VoucherCode, priced.SubTotal);
+                if (check.Success) voucher = check.Value;
+                else voucherError = check.Error;
+            }
+
+            var discount = voucher?.Discount ?? 0m;
+
+            return Result.Ok(new OrderPreviewResponse
+            {
+                Items = priced.Lines.Select(l => new OrderPreviewItem
+                {
+                    CartItemId = l.Item.Id,
+                    ProductId = l.Item.ProductId,
+                    RegularPrice = l.RegularPrice,
+                    UnitPrice = l.UnitPrice,
+                    DiscountPercent = l.DiscountPercent,
+                    Quantity = l.Item.Quantity,
+                    SubTotal = l.UnitPrice * l.Item.Quantity
+                }).ToList(),
+                SubTotal = priced.SubTotal,
+                ProductSavings = priced.RegularTotal - priced.SubTotal,
+                VoucherCode = voucher?.Code,
+                VoucherDiscount = discount,
+                VoucherError = voucherError,
+                Shipping = priced.Shipping,
+                Total = priced.SubTotal - discount + priced.Shipping.Payable
+            });
         }
 
         public async Task<MyOrderListResponse> GetMyOrdersAsync(int userId, OrderQuery query)
@@ -334,6 +383,7 @@ namespace QuickCartApi.Services
                 ProductId = i.ProductId,
                 ProductName = i.Product.Name,
                 ImageUrl = GetFullImageUrl(i.Product.Images.OrderByDescending(img => img.IsDefault).Select(img => img.ImageUrl).FirstOrDefault()),
+                RegularPrice = i.RegularPrice,
                 UnitPrice = i.UnitPrice,
                 Quantity = i.Quantity,
                 SubTotal = i.SubTotal
@@ -381,12 +431,42 @@ namespace QuickCartApi.Services
                 .Select(img => img.ImageUrl)
                 .FirstOrDefault());
 
+
+        private sealed record PricedLine(CartItem Item, decimal RegularPrice, decimal UnitPrice, int DiscountPercent);
+        private sealed record PricedCart(List<PricedLine> Lines, decimal SubTotal, decimal RegularTotal, ShippingQuote Shipping);
+
+        // the one place that prices a cart, so the preview and the real order always agree:
+        // product deals first, then shipping on the discounted goods (the voucher comes off after)
+        private async Task<ServiceResult<PricedCart>> PriceCartAsync(Address address, List<CartItem> cartItems)
+        {
+            var archived = cartItems.FirstOrDefault(ci => ci.Product.ArchivedAtUtc is not null);
+            if (archived is not null)
+                return Result.Fail<PricedCart>(ErrorKind.Conflict,
+                    $"'{archived.Product.Name}' is no longer available. Please remove it from your cart.");
+
+            var deals = await dealService.GetActivePricesAsync(cartItems.Select(ci => ci.ProductId).Distinct().ToList());
+
+            var lines = cartItems.Select(ci =>
+            {
+                var regular = ci.Product.Price;
+                return deals.TryGetValue(ci.ProductId, out var deal)
+                    ? new PricedLine(ci, regular, deal.DealPrice, deal.DiscountPercent)
+                    : new PricedLine(ci, regular, regular, 0);
+            }).ToList();
+
+            var subTotal = lines.Sum(l => l.UnitPrice * l.Item.Quantity);
+            var regularTotal = lines.Sum(l => l.RegularPrice * l.Item.Quantity);
+
+            return Result.Ok(new PricedCart(lines, subTotal, regularTotal,
+                shipping.Quote(address.Province, address.City, subTotal)));
+        }
+
         // todo: refactor and clean up
         private string? GetFullImageUrl(string? url)
         {
             if (string.IsNullOrWhiteSpace(url))
                 return null; // product has no image
-
+            
             if (url.StartsWith("http", StringComparison.OrdinalIgnoreCase))
                 return url;
 

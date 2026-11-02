@@ -86,7 +86,7 @@ namespace QuickCartApi.Common;
 
             if (c == "mandaue") return ShippingZone.Mandaue;
             if (p == "cebu") return MetroCebuCities.Contains(c) ? ShippingZone.MetroCebu : ShippingZone.CebuProvince;
-            if (VisayasProvinces.Contains(p)) return ShippingZone.Visayas;
+            if (VisayasProvinces.Contains(p)) return ShippingZone.Visayas;  
             if (MindanaoProvinces.Contains(p)) return ShippingZone.Mindanao;
             return ShippingZone.Luzon; // everything else, including Metro Manila and an unknown province
         }

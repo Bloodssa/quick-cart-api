@@ -29,6 +29,15 @@ namespace QuickCartApi.Repositories
         public Task<Deal?> GetByIdAsync(int id) =>
             context.Deals.FirstOrDefaultAsync(d => d.Id == id);
 
+        public Task<List<int>> GetActiveProductIdsAsync(DateTime now) =>
+            context.DealProducts
+                .Where(dp => dp.Deal.CancelledAtUtc == null
+                          && dp.Deal.StartsAtUtc <= now
+                          && dp.Deal.EndsAtUtc > now)
+                .Select(dp => dp.ProductId)
+                .Distinct()
+                .ToListAsync();
+
         public async Task UpdateAsync(Deal deal) => await context.SaveChangesAsync();
 
         public Task<List<Deal>> GetRecentAsync() =>

@@ -10,10 +10,14 @@ namespace QuickCartApi.Repositories
     public class ProductRepository(AppDbContext context) : BaseRepository<Product>(context), IProductRepository
     {
         private const int TrendingDays = 30;
+        private const int NewArrivalDays = 14;
+        private const double BestSellerMinRating = 3.8;
 
         public async Task<(List<Product> Items, int TotalCount)> GetAllAsync(ProductQuery q)
         {
-            IQueryable<Product> query = context.Products;
+            var now = DateTime.UtcNow;
+
+            IQueryable<Product> query = context.Products.Where(p => p.ArchivedAtUtc == null);
 
             if (q.CategoryId.HasValue)
                 query = query.Where(p => p.CategoryId == q.CategoryId.Value);
@@ -23,6 +27,31 @@ namespace QuickCartApi.Repositories
 
             if (q.Featured.HasValue)
                 query = query.Where(p => p.IsFeatured == q.Featured.Value);
+
+            // deals: only products in a deal that is not cancelled and is running right now
+            if (q.OnDeal == true)
+            {
+                query = query.Where(p => context.DealProducts.Any(dp =>
+                    dp.ProductId == p.Id
+                    && dp.Deal.CancelledAtUtc == null
+                    && dp.Deal.StartsAtUtc <= now
+                    && dp.Deal.EndsAtUtc > now));
+            }
+
+            // new arrivals: added within the last 2 weeks
+            if (q.NewArrivals == true)
+            {
+                var since = now.AddDays(-NewArrivalDays);
+                query = query.Where(p => p.CreatedAt >= since);
+            }
+
+            // best sellers: has completed sales, or an average rating of 3.8 or more
+            if (q.BestSellers == true)
+            {
+                query = query.Where(p =>
+                    p.OrderItems.Any(oi => oi.Order.Status == OrderStatus.Completed) ||
+                    (p.Reviews.Any() && p.Reviews.Average(r => r.Rating) >= BestSellerMinRating));
+            }
 
             var totalCount = await query.CountAsync();
 
@@ -95,6 +124,28 @@ namespace QuickCartApi.Repositories
             await context.Products
                 .Where(p => p.Id == productId)
                 .ExecuteUpdateAsync(s => s.SetProperty(p => p.StockQuantity, p => p.StockQuantity + quantity));
+
+        public async Task<bool> IsUsedAsync(int productId) =>
+            await context.OrderItems.AnyAsync(oi => oi.ProductId == productId) || await context.DealProducts.AnyAsync(dp => dp.ProductId == productId);
+
+        public async Task ArchiveAsync(int productId) =>
+            await context.Products
+                .Where(p => p.Id == productId)
+                .ExecuteUpdateAsync(s => s.SetProperty(p => p.ArchivedAtUtc, DateTime.UtcNow));
+
+        public async Task RemoveFromCartsAsync(int productId) =>
+            await context.CartItems.Where(ci => ci.ProductId == productId).ExecuteDeleteAsync();
+
+        public async Task<Dictionary<int, int>> GetSoldCountsAsync(List<int> productIds)
+        {
+            if (productIds.Count == 0) return new();
+
+            return await context.OrderItems
+                .Where(i => productIds.Contains(i.ProductId) && i.Order.Status == OrderStatus.Completed)
+                .GroupBy(i => i.ProductId)
+                .Select(g => new { ProductId = g.Key, Sold = g.Sum(i => i.Quantity) })
+                .ToDictionaryAsync(x => x.ProductId, x => x.Sold);
+        }
 
         private static IOrderedQueryable<Product> ApplySort(IQueryable<Product> query, ProductSort sort)
         {

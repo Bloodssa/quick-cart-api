@@ -10,6 +10,12 @@
         public int CategoryId { get; set; }
         public string CategoryName { get; set; } = string.Empty;
         public bool IsFeatured { get; set; }
+
+        // set only while a discount is active on this product
+        public decimal? DealPrice { get; set; }
+        public int? DiscountPercent { get; set; }
+        public DateTime? DealEndsAt { get; set; }
+        public int SoldCount { get; set; }
         public DateTime CreatedAt { get; set; }
         public List<ProductImageResponse> Images { get; set; } = [];
     }

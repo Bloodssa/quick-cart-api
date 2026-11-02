@@ -15,6 +15,7 @@ namespace QuickCartApi.DTOs.Order
         [Required]
         [MinLength(1, ErrorMessage = "Select at least one item to check out")]
         public List<int> CartItemIds { get; set; } = [];
+        [MaxLength(20)]
         public string? VoucherCode { get; set; }
     }
 }

@@ -1,8 +1,11 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using QuickCartApi.Common;
+using QuickCartApi.DTOs.Deal;
 using QuickCartApi.DTOs.Product;
 using QuickCartApi.Entities;
 using QuickCartApi.Repositories.Interfaces;
 using QuickCartApi.Services.Interfaces;
+using static QuestPDF.Helpers.Colors;
 
 namespace QuickCartApi.Services
 {
@@ -10,7 +13,8 @@ namespace QuickCartApi.Services
             IProductRepository productRepository,
             IProductImageRepository productImageRepository,
             IFileStorageService storage,
-            IHttpContextAccessor httpContextAccessor
+            IHttpContextAccessor httpContextAccessor,
+            IDealService dealService
         ) : IProductService
     {
         private const int LowStockThreshold = 10;
@@ -21,10 +25,14 @@ namespace QuickCartApi.Services
             q.PageSize = q.PageSize is < 1 or > 100 ? 20 : q.PageSize;
 
             var (items, totalCount) = await productRepository.GetAllAsync(q);
+            var ids = items.Select(p => p.Id).ToList();
+
+            var deals = await dealService.GetActivePricesAsync(ids);
+            var sold = await productRepository.GetSoldCountsAsync(ids);
 
             return new ProductListResponse
             {
-                Products = items.Select(ToResponse).ToList(),
+                Products = items.Select(p => ToResponse(p, deals.GetValueOrDefault(p.Id), sold.GetValueOrDefault(p.Id))).ToList(),
                 Page = q.Page,
                 PageSize = q.PageSize,
                 TotalResults = totalCount
@@ -34,7 +42,12 @@ namespace QuickCartApi.Services
         public async Task<ProductResponse?> GetByIdAsync(int id)
         {
             var product = await productRepository.GetByIdAsync(id);
-            return product is null ? null : ToResponse(product);
+            if (product is null || product.ArchivedAtUtc is not null) return null;
+
+            var deals = await dealService.GetActivePricesAsync([product.Id]);
+            var sold = await productRepository.GetSoldCountsAsync([product.Id]);
+
+            return ToResponse(product, deals.GetValueOrDefault(product.Id), sold.GetValueOrDefault(product.Id));
         }
 
         public async Task<(ProductResponse? Product, string? error)> CreateAsync(CreateProductRequest request)
@@ -82,22 +95,33 @@ namespace QuickCartApi.Services
             return (true, null, ToResponse(updated!));
         }
 
-        public async Task<(bool Success, string? Error)> DeleteAsync(int id)
+        public async Task<ServiceResult> DeleteAsync(int id)
         {
             var product = await productRepository.GetByIdAsync(id);
-            if (product is null) return (false, "Product not found.");
+            if (product is null)
+                return Result.Fail(ErrorKind.NotFound, "Product not found.");
 
-            if (product.Images is { Count: > 0 })
+            // nobody should keep it in a cart, whichever way it goes
+            await productRepository.RemoveFromCartsAsync(id);
+
+            // ordered or in a discount: archive it, so order history keeps its product
+            if (await productRepository.IsUsedAsync(id))
             {
-                foreach (var image in product.Images)
-                {
-                    var fileName = Path.GetFileName(image.ImageUrl);
-                    storage.DeleteImage(fileName);
-                }
+                await productRepository.ArchiveAsync(id);
+                return Result.Ok();
             }
 
-            await productRepository.DeleteAsync(product);
-            return (true, null);
+            try
+            {
+                await productRepository.DeleteAsync(product);
+                return Result.Ok();
+            }
+            catch (DbUpdateException e) when (e.InnerException is Microsoft.Data.SqlClient.SqlException { Number: 547 })
+            {
+                // 547 = foreign key conflict from something not checked above (reviews, for example)
+                await productRepository.ArchiveAsync(id);
+                return Result.Ok();
+            }
         }
 
 
@@ -144,7 +168,7 @@ namespace QuickCartApi.Services
             return (true, null);
         }
 
-        private ProductResponse ToResponse(Product product) => new()
+        private ProductResponse ToResponse(Product product, ActiveDealResponse? deal = null, int soldCount = 0) => new()
         {
             Id = product.Id,
             Name = product.Name,
@@ -152,6 +176,10 @@ namespace QuickCartApi.Services
             Price = product.Price,
             StockQuantity = product.StockQuantity,
             IsFeatured = product.IsFeatured,
+            SoldCount = soldCount,
+            DealPrice = deal?.DealPrice,
+            DiscountPercent = deal?.DiscountPercent,
+            DealEndsAt = deal?.EndsAt,
             CategoryId = product.CategoryId,
             CategoryName = product.Category?.Name ?? string.Empty,
             CreatedAt = product.CreatedAt,

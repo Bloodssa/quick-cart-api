@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using QuickCartApi.Common;
 using QuickCartApi.DTOs.Order;
+using QuickCartApi.DTOs.Order.Customer;
 using QuickCartApi.Extensions;
 using QuickCartApi.Services.Interfaces;
 
@@ -54,5 +55,12 @@ namespace QuickCartApi.Controllers
         [EnableRateLimiting(RateLimitingExtension.ReadPolicy)]
         public ActionResult<ShippingQuote> GetShippingQuote([FromQuery] string? province, [FromQuery] string? city, [FromQuery] decimal subtotal)
              => Ok(shipping.Quote(province, city, subtotal));
+
+        [HttpPost("preview")]
+        public async Task<ActionResult<OrderPreviewResponse>> Preview(OrderPreviewRequest request)
+        {
+            var result = await orderService.PreviewAsync(User.GetUserId(), request);
+            return result.Success ? Ok(result.Value) : result.ToProblem();
         }
+    }
 }

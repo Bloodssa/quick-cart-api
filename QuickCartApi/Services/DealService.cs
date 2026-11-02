@@ -1,4 +1,5 @@
-﻿using QuickCartApi.Common;
+﻿using Microsoft.EntityFrameworkCore;
+using QuickCartApi.Common;
 using QuickCartApi.DTOs.Deal;
 using QuickCartApi.Entities;
 using QuickCartApi.Enums;
@@ -94,6 +95,9 @@ namespace QuickCartApi.Services
             var rows = await repository.GetActiveDealProductsAsync(productIds, Now());
             return PickBestPerProduct(rows);
         }
+
+        public Task<List<int>> GetActiveProductIdsAsync() =>
+            repository.GetActiveProductIdsAsync(DateTime.UtcNow);
 
         /**
          * HELPERS

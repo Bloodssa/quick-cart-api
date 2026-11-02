@@ -261,6 +261,10 @@ namespace QuickCartApi.Migrations
                     b.Property<int>("Quantity")
                         .HasColumnType("int");
 
+                    b.Property<decimal?>("RegularPrice")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("decimal(10,2)");
+
                     b.Property<decimal>("SubTotal")
                         .HasPrecision(10, 2)
                         .HasColumnType("decimal(10,2)");
@@ -285,6 +289,9 @@ namespace QuickCartApi.Migrations
                         .HasColumnType("int");
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("ArchivedAtUtc")
+                        .HasColumnType("datetime2");
 
                     b.Property<int>("CategoryId")
                         .HasColumnType("int");
@@ -727,7 +734,7 @@ namespace QuickCartApi.Migrations
             modelBuilder.Entity("QuickCartApi.Entities.ProductReview", b =>
                 {
                     b.HasOne("QuickCartApi.Entities.Product", "Product")
-                        .WithMany()
+                        .WithMany("Reviews")
                         .HasForeignKey("ProductId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -800,6 +807,8 @@ namespace QuickCartApi.Migrations
                     b.Navigation("Images");
 
                     b.Navigation("OrderItems");
+
+                    b.Navigation("Reviews");
                 });
 
             modelBuilder.Entity("QuickCartApi.Entities.ProductReview", b =>

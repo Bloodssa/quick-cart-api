@@ -15,5 +15,6 @@ namespace QuickCartApi.Services.Interfaces
 
         // checkout: the discounted price for these products (products without a deal are not in the result)
         Task<Dictionary<int, ActiveDealResponse>> GetActivePricesAsync(List<int> productIds);
+        public Task<List<int>> GetActiveProductIdsAsync();
     }
 }

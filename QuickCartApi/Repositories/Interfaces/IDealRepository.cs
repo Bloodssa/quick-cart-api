@@ -14,5 +14,6 @@ namespace QuickCartApi.Repositories.Interfaces
 
         // productIds = null returns every active deal product
         Task<List<DealProduct>> GetActiveDealProductsAsync(List<int>? productIds, DateTime nowUtc);
+        Task<List<int>> GetActiveProductIdsAsync(DateTime now);
     }
 }

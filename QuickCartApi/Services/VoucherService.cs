@@ -67,6 +67,17 @@ namespace QuickCartApi.Services
 
         public async Task<ServiceResult<AppliedVoucher>> ApplyAsync(int userId, string code, decimal subTotal)
         {
+            var check = await CheckAsync(userId, code, subTotal);
+            if (!check.Success) return check;
+
+            if (!await repository.TryClaimUseAsync(check.Value!.VoucherId))
+                return Result.Fail<AppliedVoucher>(ErrorKind.Conflict, "This voucher has just been fully claimed.");
+
+            return check;
+        }
+
+        public async Task<ServiceResult<AppliedVoucher>> CheckAsync(int userId, string code, decimal subTotal)
+        {
             var now = Now();
 
             var voucher = await repository.GetByCodeAsync(VoucherRules.NormalizeCode(code));
@@ -89,9 +100,6 @@ namespace QuickCartApi.Services
 
             if (await repository.CountUserUsesAsync(voucher.Id, userId) >= voucher.PerUserLimit)
                 return Result.Fail<AppliedVoucher>(ErrorKind.Validation, "You have already used this voucher.");
-
-            if (!await repository.TryClaimUseAsync(voucher.Id))
-                return Result.Fail<AppliedVoucher>(ErrorKind.Conflict, "This voucher has just been fully claimed.");
 
             return Result.Ok(new AppliedVoucher
             {

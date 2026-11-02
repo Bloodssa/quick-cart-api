@@ -1,5 +1,6 @@
 ﻿using QuickCartApi.Common;
 using QuickCartApi.DTOs.Order;
+using QuickCartApi.DTOs.Order.Customer;
 
 namespace QuickCartApi.Services.Interfaces
 {
@@ -15,5 +16,6 @@ namespace QuickCartApi.Services.Interfaces
         Task<OrderListResponse> GetAllAsync(OrderQuery query);
         Task<ServiceResult<OrderResponse>> GetByIdAsync(int orderId);
         Task<ServiceResult<OrderResponse>> UpdateStatusAsync(int orderId, UpdateOrderStatusRequest request);
+        Task<ServiceResult<OrderPreviewResponse>> PreviewAsync(int userId, OrderPreviewRequest request);
     }
 }

@@ -22,6 +22,8 @@ namespace QuickCartApi.Data.Configurations
                 .WithMany(p => p.OrderItems)
                 .HasForeignKey(oi => oi.ProductId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            builder.Property(i => i.RegularPrice).HasPrecision(10, 2);
         }
     }
 }

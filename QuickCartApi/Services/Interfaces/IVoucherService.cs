@@ -16,5 +16,6 @@ namespace QuickCartApi.Services.Interfaces
 
         // called when an order that used a voucher is cancelled
         Task ReleaseAsync(int voucherId);
+        Task<ServiceResult<AppliedVoucher>> CheckAsync(int userId, string code, decimal subTotal);
     }
 }

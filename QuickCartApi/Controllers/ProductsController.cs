@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.RateLimiting;
 using QuickCartApi.DTOs.Product;
 using QuickCartApi.Extensions;
 using QuickCartApi.Services.Interfaces;
+using QuickCartApi.Common;
 
 // For more information on enabling Web API for empty projects, visit https://go.microsoft.com/fwlink/?LinkID=397860
 
@@ -69,8 +70,8 @@ namespace QuickCartApi.Controllers
         [EnableRateLimiting(RateLimitingExtension.WritePolicy)]
         public async Task<IActionResult> Delete(int id)
         {
-            var (success, error) = await productService.DeleteAsync(id);
-            return success ? NoContent() : NotFound(new { message = error } );
+            var result = await productService.DeleteAsync(id);
+            return result.Success ? NoContent() : result.ToProblem();
         }
 
         [Authorize(Roles = "Admin")]
