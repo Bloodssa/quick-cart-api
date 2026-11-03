@@ -10,5 +10,7 @@ namespace QuickCartApi.Repositories.Interfaces
         Task<bool> FindUserNameExistAsync(string username);
         Task<User> UpdateUserAsync(User user);
         Task<bool> FindEmailExistAsync(string email);
+        Task<bool> UsernameTakenByOtherAsync(string username, int excludeUserId);
+        Task<bool> EmailTakenByOtherAsync(string email, int excludeUserId);
     }
 }

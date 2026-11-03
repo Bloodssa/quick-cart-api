@@ -6,5 +6,6 @@ namespace QuickCartApi.Services.Interfaces
     public interface IUserService
     {
         Task<ServiceResult<bool>> ChangePasswordAsync(int userId, ChangePasswordRequest request);
+        Task<ServiceResult<UserProfileResponse>> UpdateProfileAsync(int userId, UpdateProfileRequest request);
     }
 }

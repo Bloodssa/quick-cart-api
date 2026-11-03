@@ -16,6 +16,10 @@
         public int? DiscountPercent { get; set; }
         public DateTime? DealEndsAt { get; set; }
         public int SoldCount { get; set; }
+
+        public double AverageRating { get; set; }   // 0 when there are no reviews
+        public int ReviewCount { get; set; }
+
         public DateTime CreatedAt { get; set; }
         public List<ProductImageResponse> Images { get; set; } = [];
     }

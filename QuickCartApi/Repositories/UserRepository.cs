@@ -40,5 +40,11 @@ namespace QuickCartApi.Repositories
 
             return user;
         }
+
+        public async Task<bool> UsernameTakenByOtherAsync(string username, int excludeUserId) =>
+            await context.Users.AnyAsync(u => u.Username == username && u.Id != excludeUserId);
+
+        public async Task<bool> EmailTakenByOtherAsync(string email, int excludeUserId) =>
+            await context.Users.AnyAsync(u => u.Email == email && u.Id != excludeUserId);
     }
 }

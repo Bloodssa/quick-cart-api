@@ -34,7 +34,31 @@ namespace QuickCartApi.Services;
             return Result.Ok(true);
         }
 
-         private bool Verify(User user, string password) =>
+        public async Task<ServiceResult<UserProfileResponse>> UpdateProfileAsync(int userId, UpdateProfileRequest request)
+        {
+            var user = await userRepository.FindUserByIdAsync(userId);
+            if (user is null)
+                return Result.Fail<UserProfileResponse>(ErrorKind.NotFound, "User not found.");
+
+            var fullName = request.FullName.Trim();
+            var username = request.Username.Trim();
+            var email = request.Email.Trim().ToLowerInvariant(); // match however registration stores emails
+
+            if (await userRepository.UsernameTakenByOtherAsync(username, userId))
+                return Result.Fail<UserProfileResponse>(ErrorKind.Validation, "That username is already taken.");
+
+            if (await userRepository.EmailTakenByOtherAsync(email, userId))
+                return Result.Fail<UserProfileResponse>(ErrorKind.Validation, "That email is already in use.");
+
+            user.FullName = fullName;
+            user.Username = username;
+            user.Email = email;
+            await userRepository.UpdateUserAsync(user);
+
+            return Result.Ok(new UserProfileResponse(user.Id, user.FullName, user.Username, user.Email));
+        }
+
+        private bool Verify(User user, string password) =>
              hasher.VerifyHashedPassword(user, user.PasswordHash, password) != PasswordVerificationResult.Failed;
         private string Hash(User user, string password) => hasher.HashPassword(user, password);
 }

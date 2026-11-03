@@ -16,5 +16,6 @@ namespace QuickCartApi.Repositories.Interfaces
         Task ArchiveAsync(int productId);
         Task RemoveFromCartsAsync(int productId);
         Task<Dictionary<int, int>> GetSoldCountsAsync(List<int> productIds);
+        Task<Dictionary<int, (double Average, int Count)>> GetRatingStatsAsync(List<int> productIds);
     }
 }

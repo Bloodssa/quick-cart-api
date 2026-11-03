@@ -29,10 +29,15 @@ namespace QuickCartApi.Services
 
             var deals = await dealService.GetActivePricesAsync(ids);
             var sold = await productRepository.GetSoldCountsAsync(ids);
+            var ratings = await productRepository.GetRatingStatsAsync(ids);
 
             return new ProductListResponse
             {
-                Products = items.Select(p => ToResponse(p, deals.GetValueOrDefault(p.Id), sold.GetValueOrDefault(p.Id))).ToList(),
+                Products = items.Select(p => ToResponse(
+                    p,
+                    deals.GetValueOrDefault(p.Id),
+                    sold.GetValueOrDefault(p.Id),
+                    ratings.GetValueOrDefault(p.Id))).ToList(),
                 Page = q.Page,
                 PageSize = q.PageSize,
                 TotalResults = totalCount
@@ -46,8 +51,9 @@ namespace QuickCartApi.Services
 
             var deals = await dealService.GetActivePricesAsync([product.Id]);
             var sold = await productRepository.GetSoldCountsAsync([product.Id]);
+            var ratings = await productRepository.GetRatingStatsAsync([product.Id]);
 
-            return ToResponse(product, deals.GetValueOrDefault(product.Id), sold.GetValueOrDefault(product.Id));
+            return ToResponse(product, deals.GetValueOrDefault(product.Id), sold.GetValueOrDefault(product.Id), ratings.GetValueOrDefault(product.Id));
         }
 
         public async Task<(ProductResponse? Product, string? error)> CreateAsync(CreateProductRequest request)
@@ -168,7 +174,7 @@ namespace QuickCartApi.Services
             return (true, null);
         }
 
-        private ProductResponse ToResponse(Product product, ActiveDealResponse? deal = null, int soldCount = 0) => new()
+        private ProductResponse ToResponse(Product product, ActiveDealResponse? deal = null, int soldCount = 0, (double Average, int Count) rating = default) => new ()
         {
             Id = product.Id,
             Name = product.Name,
@@ -177,6 +183,8 @@ namespace QuickCartApi.Services
             StockQuantity = product.StockQuantity,
             IsFeatured = product.IsFeatured,
             SoldCount = soldCount,
+            AverageRating = rating.Average,
+            ReviewCount = rating.Count,
             DealPrice = deal?.DealPrice,
             DiscountPercent = deal?.DiscountPercent,
             DealEndsAt = deal?.EndsAt,

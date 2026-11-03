@@ -85,6 +85,19 @@ namespace QuickCartApi.Repositories
             return rows > 0;
         }
 
+        public async Task<Dictionary<int, (double Average, int Count)>> GetRatingStatsAsync(List<int> productIds)
+        {
+            if (productIds.Count == 0) return new();
+
+            var rows = await context.ProductReviews.AsNoTracking()
+                .Where(r => productIds.Contains(r.ProductId))
+                .GroupBy(r => r.ProductId)
+                .Select(g => new { ProductId = g.Key, Average = g.Average(r => (double)r.Rating), Count = g.Count() })
+                .ToListAsync();
+
+            return rows.ToDictionary(x => x.ProductId, x => (Math.Round(x.Average, 2), x.Count));
+        }
+
         public async Task<int?> AdjustStockAsync(int id, int delta)
         {
             // One atomic UPDATE: the WHERE clause refuses to push stock below zero
